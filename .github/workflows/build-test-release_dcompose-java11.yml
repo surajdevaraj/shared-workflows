@@ -48,11 +48,16 @@ on:
         required: false
         default: '[]'
         type: string
+      runsOn:
+        description: 'The runner label to use for the job'
+        required: false
+        default: 'ubuntu-latest'
+        type: string
 permissions: write-all
 jobs:
   build-and-test:
     name: Build and Test Quality Gate Job
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runsOn }}
     env:
       ORG_GRADLE_PROJECT_nexusUsername: ${{ secrets.NEXUS_USERNAME }}
       ORG_GRADLE_PROJECT_nexusPassword: ${{ secrets.NEXUS_PASSWORD }}
@@ -336,11 +341,13 @@ jobs:
 
       - name: Should Publish OCP DockerImage
         continue-on-error: true
+        if: inputs.runsOn != 'ubuntu-latest'
         run: ./gradlew tasks --all | grep -w "publishOCPImage"
         id: publish_ocp
 
       - name: Configure OCP Docker Image
-        if: steps.publish_ocp.outcome == 'success' && !startsWith(github.ref, 'refs/tags/RC')
+        continue-on-error: true
+        if: inputs.runsOn != 'ubuntu-latest' && steps.publish_ocp.outcome == 'success' && !startsWith(github.ref, 'refs/tags/RC')
         id: ocp-docker-image-config
         run: |
           if [[ ${{ github.event_name }} == 'pull_request' ]]; then
@@ -352,32 +359,53 @@ jobs:
           fi
 
       - name: OCP Release Tag
+        continue-on-error: true
         id: ocp_rc_tag
-        if: steps.publish_ocp.outcome == 'success' && startsWith(github.ref, 'refs/tags/RC')
+        if: inputs.runsOn != 'ubuntu-latest' && steps.publish_ocp.outcome == 'success' && startsWith(github.ref, 'refs/tags/RC')
         run: |
           echo "::set-output name=rc_image_tag::$(echo ${{ github.ref }} | sed -n 's/refs\/tags\/\(.*\)/\1/p')"
 
       - name: Configure RC OCP Docker Image
-        if: steps.publish_ocp.outcome == 'success' && startsWith(github.ref, 'refs/tags/RC')
+        continue-on-error: true
+        if: inputs.runsOn != 'ubuntu-latest' && steps.publish_ocp.outcome == 'success' && startsWith(github.ref, 'refs/tags/RC')
         id: ocp-docker-rc-image-name
         run: |
           echo '::set-output name=image_name::${{ steps.ocp_rc_tag.outputs.rc_image_tag }}-${{ steps.extract_git_branch_info.outputs.short_sha }}'
 
       - name: OCP Docker Image
-        if: steps.publish_ocp.outcome == 'success'
+        continue-on-error: true
+        if: inputs.runsOn != 'ubuntu-latest' && steps.publish_ocp.outcome == 'success'
         run: echo "The OCP docker image name is ${{ steps.ocp-docker-image-config.outputs.image_name }} ${{ steps.ocp-docker-rc-image-name.outputs.image_name }} and Image publishing configured for branches - ${{ inputs.branchesToPublishImagesToOCR }}"
 
       - name: Publish Image to OCP
+        continue-on-error: true
+        id: publish_ocp_image
         uses: gradle/gradle-build-action@v2
-        if:  steps.publish_ocp.outcome == 'success' && ( (contains(fromJSON(inputs.branchesToPublishImagesToOCR), steps.extract_git_branch_info.outputs.branch_name) || steps.extract_git_branch_info.outputs.ocr_pattern_match == 'true' || startsWith(steps.extract_git_branch_info.outputs.branch_name, 'releases') || startsWith(steps.extract_git_branch_info.outputs.branch_name, 'WI')) && !startsWith(github.ref, 'refs/tags/RC') )
+        if:  inputs.runsOn != 'ubuntu-latest' && steps.publish_ocp.outcome == 'success' && ( (contains(fromJSON(inputs.branchesToPublishImagesToOCR), steps.extract_git_branch_info.outputs.branch_name) || steps.extract_git_branch_info.outputs.ocr_pattern_match == 'true' || startsWith(steps.extract_git_branch_info.outputs.branch_name, 'releases') || startsWith(steps.extract_git_branch_info.outputs.branch_name, 'WI')) && !startsWith(github.ref, 'refs/tags/RC') )
         with:
           arguments: publishOCPProdImage -PimageName=${{ steps.ocp-docker-image-config.outputs.image_name }} -PocpToken=${{ secrets.OCP_REGISTRY_TOKEN }}
 
       - name: Publish RC Image to OCP
+        continue-on-error: true
+        id: publish_rc_ocp_image
         uses: gradle/gradle-build-action@v2
-        if:  steps.publish_ocp.outcome == 'success' && startsWith(github.ref, 'refs/tags/RC')
+        if:  inputs.runsOn != 'ubuntu-latest' && steps.publish_ocp.outcome == 'success' && startsWith(github.ref, 'refs/tags/RC')
         with:
           arguments: publishOCPProdImage -PimageName=${{ steps.ocp-docker-rc-image-name.outputs.image_name }} -PocpToken=${{ secrets.OCP_REGISTRY_TOKEN }}
+
+      - name: Fallback - Pull from GCR and Push to OCP
+        continue-on-error: true
+        if: >-
+          steps.publish_gcr.outcome == 'success' &&
+          (inputs.runsOn == 'ubuntu-latest' ||
+           (steps.publish_ocp_image.outcome != 'success' &&
+            steps.publish_rc_ocp_image.outcome != 'success'))
+        run: |
+          gh workflow run pull-gcr-push-ocp.yml \
+            --repo rez-one/core-architecture \
+            --ref pushocp
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: audit build
         continue-on-error: true
