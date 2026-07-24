@@ -419,7 +419,7 @@ jobs:
               echo "Triggering OCP push for: ${gcr_ref}"
               gh workflow run pull-gcr-push-ocp.yml \
                 --repo rez-one/core-architecture \
-                --ref pushocp \
+                --ref dev \
                 -f gcr_image_ref="${gcr_ref}"
             fi
           done <<< "${{ steps.gcr-images.outputs.refs }}"
