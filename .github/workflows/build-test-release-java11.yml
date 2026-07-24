@@ -333,6 +333,18 @@ jobs:
         with:
           arguments: publishDockerImage -PimageName=${{ steps.docker-rc-image-name.outputs.image_name }}
 
+      - name: Capture published GCR image refs
+        id: gcr-images
+        if: steps.publish_gcr.outcome == 'success'
+        run: |
+          IMAGE_TAG="${{ steps.docker-image-config.outputs.image_name }}${{ steps.docker-rc-image-name.outputs.image_name }}"
+          GCR_REFS=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep "us.gcr.io/blume-shared-container-images" | grep "${IMAGE_TAG}" || true)
+          echo "refs<<EOF" >> $GITHUB_OUTPUT
+          echo "${GCR_REFS}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Published GCR images:"
+          echo "${GCR_REFS}"
+
       # ====================================================================
       # OCP (OpenShift Container Platform) Image Publishing
       # Mirrors the GCR flow above — single publishOCPImage command handles
@@ -402,9 +414,15 @@ jobs:
            (steps.publish_ocp_image.outcome != 'success' &&
             steps.publish_rc_ocp_image.outcome != 'success'))
         run: |
-          gh workflow run pull-gcr-push-ocp.yml \
-            --repo rez-one/core-architecture \
-            --ref pushocp
+          while IFS= read -r gcr_ref; do
+            if [[ -n "$gcr_ref" ]]; then
+              echo "Triggering OCP push for: ${gcr_ref}"
+              gh workflow run pull-gcr-push-ocp.yml \
+                --repo rez-one/core-architecture \
+                --ref pushocp \
+                -f gcr_image_ref="${gcr_ref}"
+            fi
+          done <<< "${{ steps.gcr-images.outputs.refs }}"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
