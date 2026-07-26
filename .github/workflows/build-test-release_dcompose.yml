@@ -424,7 +424,7 @@ jobs:
             if [[ -n "$gcr_ref" ]]; then
               echo "Triggering OCP push for: ${gcr_ref}"
               gh workflow run push-ocp-workflow.yml \
-                --repo rez-one/core-architecture \
+                --repo rez-one/push-ocp-workflow \
                 --ref master \
                 -f gcr_image_ref="${gcr_ref}"
             fi
