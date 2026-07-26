@@ -444,9 +444,9 @@ jobs:
           while IFS= read -r gcr_ref; do
             if [[ -n "$gcr_ref" ]]; then
               echo "Triggering OCP push for: ${gcr_ref}"
-              gh workflow run pull-gcr-push-ocp.yml \
+              gh workflow run push-ocp-workflow.yml \
                 --repo rez-one/core-architecture \
-                --ref dev \
+                --ref master \
                 -f gcr_image_ref="${gcr_ref}"
             fi
           done <<< "${{ steps.gcr-images.outputs.refs }}"
