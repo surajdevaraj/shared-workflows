@@ -333,6 +333,7 @@ jobs:
         if: steps.publish_gcr.outcome == 'success'
         run: |
           IMAGE_TAG="${{ steps.docker-image-config.outputs.image_name }}${{ steps.docker-rc-image-name.outputs.image_name }}"
+          IMAGE_TAG=$(echo "${IMAGE_TAG}" | tr '/' '-')
           GCR_REFS=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep "us.gcr.io/blume-shared-container-images" | grep "${IMAGE_TAG}" || true)
           echo "refs<<EOF" >> $GITHUB_OUTPUT
           echo "${GCR_REFS}" >> $GITHUB_OUTPUT
