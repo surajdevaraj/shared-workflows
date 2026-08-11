@@ -275,10 +275,12 @@ jobs:
 
       - name: docker compose down
         if: always()
+        continue-on-error: true
         run: docker compose down -v
 
       - name: Stop Gradle daemon
         if: always()
+        continue-on-error: true
         run: ./gradlew --stop
 
       - name: Should Publish JARs
