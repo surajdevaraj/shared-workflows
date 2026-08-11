@@ -272,6 +272,14 @@ jobs:
         if: steps.gradle_build.outcome == 'success'
         run: ./gradlew :tddValidation -PbranchName=${{ steps.extract_git_branch_info.outputs.branch_name }} -PbaseRef=${{ github.base_ref }}
 
+      - name: docker compose down
+        if: always()
+        run: docker compose down -v
+
+      - name: Stop Gradle daemon
+        if: always()
+        run: ./gradlew --stop
+
       - name: Should Publish JARs
         continue-on-error: true
         run: ./gradlew tasks --all | grep -w "publish"
