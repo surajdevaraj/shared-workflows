@@ -277,6 +277,10 @@ jobs:
         if: always()
         run: docker compose down -v
 
+      - name: Stop Gradle daemon
+        if: always()
+        run: ./gradlew --stop
+
       - name: Should Publish JARs
         continue-on-error: true
         run: ./gradlew tasks --all | grep -w "publish"
